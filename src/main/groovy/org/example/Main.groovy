@@ -1,8 +1,8 @@
-package org.example
-
 @Grab('com.opencsv:opencsv:5.7.1')
 
 import com.opencsv.CSVReader
+import java.net.HttpURLConnection
+import java.net.URL
 
 class DepartmentHierarchy {
     static class Department {
@@ -57,8 +57,11 @@ class DepartmentHierarchy {
                 }
             }
 
-            // Print hierarchy (for testing)
+            // Print hierarchy for verification
             printHierarchy(root, 0)
+
+            // Send hierarchy to Clarity PPM
+            sendHierarchyToClarity(root)
 
         } catch (Exception e) {
             e.printStackTrace()
@@ -71,6 +74,58 @@ class DepartmentHierarchy {
         println "${'  ' * level}${department.name}"
         department.subDepartments.each { sub ->
             printHierarchy(sub, level + 1)
+        }
+    }
+
+    private static void sendHierarchyToClarity(Department department) {
+        if (!department) return
+
+        // Base URL for Clarity API (update with your Clarity instance)
+        String clarityApiUrl = "https://clarity-instance.com/api/departments"
+
+        try {
+            URL url = new URL(clarityApiUrl)
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection()
+            connection.setRequestMethod("POST")
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Authorization", "Bearer your_access_token")
+            connection.setDoOutput(true)
+
+            // Prepare JSON payload
+            String payload = """
+            {
+                "id": "${department.id}",
+                "name": "${department.name}",
+                "parentId": "${department.parentId ?: ""}"
+            }
+            """
+
+            // Send payload
+            connection.outputStream.withWriter("UTF-8") { writer ->
+                writer.write(payload)
+            }
+
+            // Check response
+            int responseCode = connection.responseCode
+            if (responseCode == 201) {
+                println "Successfully created department: ${department.name}"
+            } else {
+                println "Failed to create department: ${department.name}. Response code: $responseCode"
+                connection.inputStream?.withReader { reader ->
+                    println reader.text
+                }
+            }
+
+            // Close the connection
+            connection.disconnect()
+
+        } catch (Exception e) {
+            println "Error sending department ${department.name} to Clarity: ${e.message}"
+        }
+
+        // Recursively send sub-departments
+        department.subDepartments.each { sub ->
+            sendHierarchyToClarity(sub)
         }
     }
 }
